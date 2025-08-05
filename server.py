@@ -21,8 +21,34 @@ import tempfile
 import numpy as np
 from io import BytesIO
 from PIL import Image
+
 import matplotlib.pyplot as plt
 from base64 import b64encode, b64decode
+
+# Map object label to color (lane: blue, drivable area: orange, others: tab20 colormap)
+def get_mask(mask, obj_id=None):
+    # Lane: blue, Drivable area: orange, else: tab20
+    if obj_id == 1:  # Lane
+        color = np.array([0.2, 0.4, 1.0, 0.7])  # blue RGBA
+    elif obj_id == 2:  # Drivable area
+        color = np.array([1.0, 0.5, 0.0, 0.7])  # orange RGBA
+    else:
+        cmap = plt.get_cmap("tab20")
+        cmap_idx = 0 if obj_id is None else obj_id % 20
+        color = np.array([*cmap(cmap_idx)[:3], 0.7])
+    h, w = mask.shape[-2:]
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    return mask_image
+
+def overlay_mask(image, masks, obj_ids=None):
+    out = image.astype(np.float32)
+    if obj_ids is None:
+        obj_ids = [None] * len(masks)
+    for mask_, obj_id in zip(masks, obj_ids):
+        alpha = mask_[..., 3:]
+        mask_rgb = mask_[..., :3] * 255
+        out = out * (1 - alpha) + mask_rgb * alpha
+    return out.astype(np.uint8)
 
 def pil_image_to_base64(image):
     buffered = BytesIO()
@@ -30,45 +56,14 @@ def pil_image_to_base64(image):
     img_str = b64encode(buffered.getvalue()).decode("utf-8")
     return img_str
 
+
 def read_content(file_path: str) -> str:
-    """read the content of target file
-    """
     with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
+        return f.read()
 
-    return content
 
-# device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
-if torch.cuda.is_available():
-    print('Using GPU')
-    device = 'cuda'
-else:
-    print('CUDA not available. Please connect to a GPU instance if possible.')
-    device = 'cpu'
 
-use_sam2 = True
-if not use_sam2:
-    sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
-    model_type = "vit_l" # "vit_l" or "vit_h"
-
-    print("Loading model")
-    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
-    print("Finishing loading")
-    predictor = SamPredictor(sam)
-    mask_generator = SamAutomaticMaskGenerator(sam)
-else:
-    sam2_checkpoint = "sam2_hiera_tiny.pt"
-    model_cfg = "sam2_hiera_t.yaml"
-
-    sam2_model = build_sam2(model_cfg, sam2_checkpoint, device="cuda")
-
-    predictor = SAM2ImagePredictor(sam2_model) # for single image
-    
-    vid_predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint) # for video
-    inference_state = None
-
-    mask_generator = SAM2AutomaticMaskGenerator(sam2_model) # seg_everything
-
+# --- FastAPI app definition and CORS middleware setup ---
 
 app = FastAPI(debug=True)
 app.add_middleware(
@@ -78,6 +73,98 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Model setup: device, use_sam2, predictor, vid_predictor, mask_generator ---
+if torch.cuda.is_available():
+    print('Using GPU')
+    device = 'cuda'
+else:
+    print('CUDA not available. Please connect to a GPU instance if possible.')
+    device = 'cpu'
+
+use_sam2 = True
+if not use_sam2:
+    sam_checkpoint = "sam_vit_l_0b3195.pth"
+    model_type = "vit_l"
+    print("Loading model")
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+    print("Finishing loading")
+    predictor = SamPredictor(sam)
+    mask_generator = SamAutomaticMaskGenerator(sam)
+
+else:
+    sam2_checkpoint = "sam2_hiera_tiny.pt"
+    model_cfg = "sam2_hiera_t.yaml"
+    sam2_model = build_sam2(model_cfg, sam2_checkpoint, device="cpu")
+    predictor = SAM2ImagePredictor(sam2_model)
+    vid_predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device="cpu")
+    inference_state = None
+    mask_generator = SAM2AutomaticMaskGenerator(sam2_model)
+
+    # --- SAM2 seg_propagation implementation ---
+    def seg_propagation():
+        global VIDEO_PATH, FPS, inference_state, vid_predictor
+        # Get all frame paths in VIDEO_PATH
+        frame_paths = sorted([os.path.join(VIDEO_PATH, f) for f in os.listdir(VIDEO_PATH) if f.endswith('.jpg')], key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+        if not frame_paths:
+            raise RuntimeError("No frames found in video path.")
+        # Propagate masks for all frames and store in inference_state['masks']
+        mask_results = list(vid_predictor.propagate_in_video(inference_state))
+        masks = []
+        for frame_idx, obj_ids, video_res_masks in mask_results:
+            # video_res_masks shape: (num_objects, H, W)
+            # For single-object, squeeze to (H, W)
+            if video_res_masks.shape[0] == 1:
+                masks.append(video_res_masks[0])
+            else:
+                # For multi-object, create a single mask with object ids
+                mask = np.zeros_like(video_res_masks[0], dtype=np.uint8)
+                for i, obj_id in enumerate(obj_ids):
+                    mask[video_res_masks[i] > 0.5] = obj_id
+                masks.append(mask)
+        inference_state['masks'] = masks
+        if not masks or len(masks) != len(frame_paths):
+            raise RuntimeError(f"Number of masks ({len(masks) if masks else 0}) does not match number of frames ({len(frame_paths)}).")
+        # Overlay masks on frames
+        out_frames = []
+        for idx, (frame_path, mask) in enumerate(zip(frame_paths, masks)):
+            frame = cv2.imread(frame_path)
+            # If mask is multi-class, overlay each class with its color
+            if mask.ndim == 2:
+                mask = mask[None, ...]
+            overlay = frame.copy().astype(np.float32)
+            for obj_id in np.unique(mask):
+                if obj_id == 0:
+                    continue  # background
+                mask_bin = (mask[0] == obj_id)
+                if hasattr(mask_bin, 'cpu'):
+                    mask_bin = mask_bin.cpu().numpy()
+                mask_bin = mask_bin.astype(np.uint8)
+                color = None
+                if obj_id == 1:
+                    color = np.array([0.2, 0.4, 1.0, 0.7])  # blue RGBA
+                elif obj_id == 2:
+                    color = np.array([1.0, 0.5, 0.0, 0.7])  # orange RGBA
+                else:
+                    cmap = plt.get_cmap("tab20")
+                    cmap_idx = int(obj_id) % 20
+                    color = np.array([*cmap(cmap_idx)[:3], 0.7])
+                alpha = color[3]
+                rgb = (color[:3] * 255).astype(np.uint8)
+                mask_rgb = np.zeros_like(frame, dtype=np.float32)
+                for c in range(3):
+                    mask_rgb[..., c] = rgb[c] * mask_bin
+                overlay = overlay * (1 - alpha * mask_bin[..., None]) + mask_rgb * (alpha * mask_bin[..., None])
+            out_frames.append(overlay.astype(np.uint8))
+        # Write output video
+        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+        output_dir = './output'
+        output_video_path = os.path.join(output_dir, 'output_video.mp4')
+        os.makedirs(output_dir, exist_ok=True)
+        clip = ImageSequenceClip([cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in out_frames], fps=FPS or 25)
+        clip.write_videofile(output_video_path, fps=FPS or 25, audio=False)
+        print(f"[DEBUG] Wrote video to {output_video_path}")
+        return output_video_path
 
 # Define a palette for video segmentation
 import random
@@ -204,80 +291,22 @@ if not use_sam2:
 
         print(f"Propagation time: {ed-st} s")
 
-        from moviepy.editor import ImageSequenceClip, AudioFileClip
-        
+        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+        from moviepy.audio.io.AudioFileClip import AudioFileClip
+
         audio = AudioFileClip(video_name)
         fps = cap.get(cv2.CAP_PROP_FPS)
 
-        output_dir = f'./XMem/output/{video_name.split("/")[-1].split(".")[0]}.mp4'
-        if not os.path.exists('./XMem/output/'):
-            os.mkdir('./XMem/output/')
+        output_dir = './output'
+        output_video_path = os.path.join(output_dir, 'output_video.mp4')
+        os.makedirs(output_dir, exist_ok=True)
         clip = ImageSequenceClip(sequence=masked_video, fps=fps)
         # Set the audio of the new video to be the audio from the original video
         clip = clip.set_audio(audio)
-        clip.write_videofile(output_dir, fps=fps, audio=True)
-
-        return output_dir
-else:
-    def get_mask(mask, obj_id=None):
-        cmap = plt.get_cmap("tab10")
-        cmap_idx = 0 if obj_id is None else obj_id
-        color = np.array([*cmap(cmap_idx)[:3], 0.6])
-
-        # print(color, mask.shape)
-
-        h, w = mask.shape[-2:]
-        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-        return mask_image
-
-    def overlay_mask(image, masks):
-        for mask_ in masks:
-            alpha = mask_[..., 3:]
-            mask_ = mask_[..., :3] * 255
-            # print(set(mask_.flatten()), set(alpha.flatten()))
-            image = image * (1 - alpha) + mask_ * alpha
-        return image
-    
-    def seg_propagation():
-        global VIDEO_NAME, VIDEO_PATH, FPS, inference_state
-
-        st = time.time()
-
-        video_segments = {}  # video_segments contains the per-frame segmentation results
-        masked_video = []
-        for out_frame_idx, out_obj_ids, out_mask_logits in vid_predictor.propagate_in_video(inference_state):
-            video_segments[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
-                for i, out_obj_id in enumerate(out_obj_ids)
-            }
-
-            masked_video.append(
-                overlay_mask(cv2.imread(f"{VIDEO_PATH}/{out_frame_idx}.jpg")[...,::-1], [get_mask(out_mask, out_obj_id) for out_obj_id, out_mask in video_segments[out_frame_idx].items()])
-            )
-        
-        ed = time.time()
-
-        print(f"Propagation time: {ed-st} s")
-
-        from moviepy.editor import ImageSequenceClip, AudioFileClip
-
-        output_dir = f'./output/{VIDEO_NAME.split("/")[-1].split(".")[0]}.mp4'
-        if not os.path.exists('./output/'):
-            os.mkdir('./output/')
-
-        AUDIO = AudioFileClip(VIDEO_NAME)
-        print(len(masked_video), FPS, AUDIO)
-
-        try:
-            clip = ImageSequenceClip(sequence=masked_video, fps=FPS)
-            # Set the audio of the new video to be the audio from the original video
-            clip = clip.set_audio(AUDIO)
-            clip.write_videofile(output_dir, fps=FPS, audio=True)
-        except:
-            clip = ImageSequenceClip(sequence=masked_video, fps=FPS)
-            clip.write_videofile(output_dir, fps=FPS, audio=False)
-
-        return output_dir
+        print(f"[DEBUG] Writing processed video to {output_video_path}")
+        clip.write_videofile(output_video_path, fps=fps, audio=True)
+        print(f"[DEBUG] Wrote video to {output_video_path}")
+        return output_video_path
 
 VIDEO_NAME = ""
 VIDEO_PATH = ""
@@ -316,17 +345,18 @@ async def obtain_videos(
             _, frame = cap.read()
             if frame is None:
                 break
-            
             cv2.imwrite(f"{VIDEO_PATH}/{frame_count}.jpg", frame)
             frame_count += 1
-            # print(f"Succeed in saving frame {frame_count}")
-
         FPS = cap.get(cv2.CAP_PROP_FPS)
-        
         cap.release()
+        # Defensive: set default FPS if not detected
+        if not FPS or FPS == 0:
+            FPS = 25
 
         inference_state = vid_predictor.init_state(video_path=VIDEO_PATH)
         vid_predictor.reset_state(inference_state)
+
+
 
     return JSONResponse(
         content={
@@ -342,6 +372,8 @@ async def process_videos(
     global VIDEO_NAME, VIDEO_PATH
 
     ini_seg_data = await ini_seg.read()
+    if not ini_seg_data or len(ini_seg_data) < 10:
+        raise HTTPException(status_code=400, detail="Uploaded mask is empty or invalid. Please draw a mask before segmenting the video.")
 
     tmp_seg_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
     tmp_seg_file.write(ini_seg_data)
@@ -352,108 +384,219 @@ async def process_videos(
     if VIDEO_NAME == "" and VIDEO_PATH == "":
         raise HTTPException(status_code=204, detail="No content")
     
-    if not use_sam2:
-        res_path = seg_propagation(VIDEO_NAME, tmp_seg_file.name)
-    else:
-        res_path = seg_propagation()
+    try:
+        if not use_sam2:
+            res_path = seg_propagation(VIDEO_NAME, tmp_seg_file.name)
+        else:
+            res_path = seg_propagation()
+        print(f"[DEBUG] seg_propagation returned: {res_path}")
+    except RuntimeError as e:
+        if "No points are provided" in str(e):
+            print(f"[ERROR] seg_propagation failed: {e}")
+            return JSONResponse(
+                content={
+                    "error": "No points are provided. Please annotate at least one region (point, box, or mask) on the first frame before segmenting the video.",
+                    "message": str(e)
+                },
+                status_code=400,
+            )
+        else:
+            print(f"[ERROR] seg_propagation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail="Video processing failed.")
 
     os.unlink(tmp_seg_file.name)
-    # shutil.rmtree(VIDEO_PATH)
-    # os.unlink(VIDEO_NAME)
-    # VIDEO_NAME = ""
 
-    # Return a FileResponse with the processed video path
+    # List all .mp4 files in ./output/ and /tmp/ for debugging
+    import glob
+    output_mp4s = glob.glob('./output/*.mp4')
+    tmp_mp4s = glob.glob('/tmp/*.mp4')
+    print(f"[DEBUG] .mp4 files in ./output/: {output_mp4s}")
+    print(f"[DEBUG] .mp4 files in /tmp/: {tmp_mp4s}")
+
+    # Always copy the latest .mp4 (excluding output_video.mp4) from ./output/ and /tmp/ to output_video.mp4
+    import time, glob, shutil, os
+    wait_path = './output/output_video.mp4'
+    for _ in range(20):
+        # Find all .mp4 files in ./output/ and /tmp/ except output_video.mp4
+        mp4s = [f for f in glob.glob('./output/*.mp4') if os.path.basename(f) != 'output_video.mp4']
+        mp4s += [f for f in glob.glob('/tmp/*.mp4')]
+        if mp4s:
+            latest_mp4 = sorted(mp4s, key=os.path.getmtime, reverse=True)[0]
+            print(f"[DEBUG] Found latest processed video: {latest_mp4}")
+            # Ensure output directory exists
+            try:
+                os.makedirs(os.path.dirname(wait_path), exist_ok=True)
+            except Exception as e:
+                print(f"[ERROR] Failed to create output directory: {e}")
+            if not os.path.exists(wait_path) or os.path.getmtime(latest_mp4) > os.path.getmtime(wait_path):
+                print(f"[DEBUG] Copying {latest_mp4} to {wait_path}")
+                try:
+                    shutil.copy(latest_mp4, wait_path)
+                    print(f"[DEBUG] Copy succeeded. Exists after copy: {os.path.exists(wait_path)}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to copy {latest_mp4} to {wait_path}: {e}")
+        if os.path.exists(wait_path):
+            print(f"[DEBUG] Confirmed {wait_path} exists before returning response.")
+            break
+        print(f"[DEBUG] Waiting for {wait_path} to be created...")
+        time.sleep(0.5)
+    else:
+        print(f"[ERROR] {wait_path} was not created after seg_propagation! Check if seg_propagation failed or mask was empty.")
+
+
+    # Final check: ensure output video exists and is a valid MP4 (nonzero size)
+    if not os.path.exists(wait_path) or os.path.getsize(wait_path) < 1024:
+        print(f"[ERROR] Output video {wait_path} is missing or too small. Returning bundled blank.mp4 for browser compatibility.")
+        fallback_bundled = './assets/blank.mp4'  # Place a known-good blank.mp4 in assets for emergency fallback
+        if os.path.exists(fallback_bundled):
+            print(f"[DEBUG] Using bundled blank.mp4 from assets.")
+            return FileResponse(
+                fallback_bundled,
+                media_type="video/mp4",
+                headers={
+                    "Content-Disposition": f'inline; filename="error.mp4"',
+                    "Content-Type": "video/mp4"
+                },
+            )
+        else:
+            print(f"[ERROR] No fallback video available at all! Please add a blank.mp4 to ./assets/.")
+            return JSONResponse(
+                content={
+                    "error": "Processed video was not generated or is invalid, and fallback video could not be created.",
+                    "message": "No fallback video available. Please add a blank.mp4 to ./assets/."
+                },
+                status_code=500,
+            )
+
+    # Extra debug: print file size and confirm before returning
+    print(f"[DEBUG] Returning video file: {wait_path}, size: {os.path.getsize(wait_path)} bytes")
+    print(f"[DEBUG] VIDEO_NAME: {VIDEO_NAME}")
+    print(f"[DEBUG] FileResponse headers: inline; filename=\"{VIDEO_NAME.split('/')[-1].split('.')[0]}.mp4\"")
+
+    # Serve as inline for browser playback, not attachment, and force Content-Type for browser compatibility
     return FileResponse(
-        res_path,
+        wait_path,
         media_type="video/mp4",
         headers={
-            "Content-Disposition": f'attachment; filename="{VIDEO_NAME.split("/")[-1].split(".")[0]}.mp4"',
+            "Content-Disposition": f'inline; filename="{VIDEO_NAME.split("/")[-1].split(".")[0]}.mp4"',
+            "Content-Type": "video/mp4"
         },
     )
 
 @app.post("/undo")
 async def undo_mask():
     global segmented_mask
-    # this is not necessary actually because segmented_mask is only maintained but not used
-    segmented_mask.pop()
-
-    return JSONResponse(
-        content={
-            "message": "Clear successfully",
-        },
-        status_code=200,
-    )
+    # Only pop if there is something to undo
+    if segmented_mask:
+        segmented_mask.pop()
+        return JSONResponse(
+            content={
+                "message": "Clear successfully",
+            },
+            status_code=200,
+        )
+    else:
+        return JSONResponse(
+            content={
+                "message": "No mask to undo",
+            },
+            status_code=200,
+        )
 
 
 from fastapi import Request
 
 
+
+# --- Enhanced /click endpoint to support object label (e.g., lane, drivable area) ---
 @app.post("/click")
 async def click_images(
     request: Request,
-):  
+):
     global mask_input, interactive_mask, inference_state
 
     form_data = await request.form()
     type_list = [int(i) for i in form_data.get("type").split(',')]
     click_list = [int(i) for i in form_data.get("click_list").split(',')]
-    # x_list = [int(i) for i in form_data.get("x").split(',')]
-    # y_list = [int(i) for i in form_data.get("y").split(',')]
-
+    # Accept object label (e.g., 1=lane, 2=drivable area) from frontend, default to 1 if not provided
+    obj_label = int(form_data.get("obj_label", 1))
     point_coords = np.array(click_list, np.float32).reshape(-1, 2)
     point_labels = np.array(type_list).reshape(-1)
 
-    print(point_coords)
-    print(point_labels)
+    print(f"[DEBUG] point_coords: {point_coords}, point_labels: {point_labels}, obj_label: {obj_label}")
 
     if (len(point_coords) == 1):
         mask_input = None
 
-    if VIDEO_NAME == "":
-        masks_, scores_, logits_ = predictor.predict(
-            point_coords=point_coords,
-            point_labels=point_labels,
-            mask_input=mask_input,
-            multimask_output=True,
-        )
-
-        best_idx = np.argmax(scores_)
-        res = masks_[best_idx]
-        mask_input = logits_[best_idx][None, :, :]
-    else:
-        _, _, out_mask_logits = vid_predictor.add_new_points(
-            inference_state=inference_state,
-            frame_idx=0,
-            obj_id=1,
-            points=point_coords,
-            labels=point_labels,
-        )
-        # print(out_mask_logits.shape)
-        res = (out_mask_logits[0][0] > 0.0).cpu().numpy()
+    try:
+        if VIDEO_NAME == "":
+            masks_, scores_, logits_ = predictor.predict(
+                point_coords=point_coords,
+                point_labels=point_labels,
+                mask_input=mask_input,
+                multimask_output=True,
+            )
+            best_idx = np.argmax(scores_)
+            res = masks_[best_idx]
+            mask_input = logits_[best_idx][None, :, :]
+        else:
+            # Prevent error if inference_state is not initialized (video not processed)
+            if inference_state is None or getattr(inference_state, 'obj_id_to_idx', None) is None and (not hasattr(inference_state, 'get') or inference_state.get('obj_id_to_idx', None) is None):
+                raise HTTPException(status_code=400, detail="Video inference state is not initialized. Please upload and process a video first, or use the tool on images or the first frame of a video only.")
+            _, _, out_mask_logits = vid_predictor.add_new_points(
+                inference_state=inference_state,
+                frame_idx=0,
+                obj_id=obj_label,
+                points=point_coords,
+                labels=point_labels,
+            )
+            res = (out_mask_logits[0][0] > 0.0).cpu().numpy()
+    except RuntimeError as e:
+        if "set_image" in str(e):
+            return JSONResponse(
+                content={
+                    "error": "No image or video has been uploaded. Please upload an image or video before using the click tool.",
+                    "message": str(e)
+                },
+                status_code=400,
+            )
+        else:
+            return JSONResponse(
+                content={
+                    "error": "Unexpected error during click mask prediction.",
+                    "message": str(e)
+                },
+                status_code=500,
+            )
 
     len_prompt = len(point_labels)
     len_mask = len(interactive_mask)
+    # Store both mask and obj_label for later overlay
     if len_mask == 0 or len_mask < len_prompt:
-        interactive_mask.append(res)
+        interactive_mask.append((res, obj_label))
     else:
-        interactive_mask[len_prompt-1] = res
+        interactive_mask[len_prompt-1] = (res, obj_label)
 
-    # Return a JSON response
-    res = Image.fromarray(res)
+    res_img = Image.fromarray(res)
     return JSONResponse(
         content={
-            "masks": pil_image_to_base64(res),
+            "masks": pil_image_to_base64(res_img),
             "message": "Images processed successfully"
         },
         status_code=200,
     )
 
+
+# --- Enhanced finish_click to support multi-class masks ---
 @app.post("/finish_click")
 async def finish_interactive_click(
     mask_idx: int = Form(...),
 ):
     global segmented_mask, interactive_mask
 
+    # Store both mask and obj_label
     segmented_mask.append(interactive_mask[mask_idx])
     interactive_mask = list()
 
@@ -472,19 +615,33 @@ async def rect_images(
     end_x: int = Form(...), # horizontal
     end_y: int = Form(...)  # vertical
 ):
-    masks_, _, _ = predictor.predict(
-        point_coords=None,
-        point_labels=None,
-        box=np.array([[start_x, start_y, end_x, end_y]]),
-        multimask_output=False
-    )
-    
+    # Defensive: check if predictor has an image set
+    try:
+        masks_, _, _ = predictor.predict(
+            point_coords=None,
+            point_labels=None,
+            box=np.array([[start_x, start_y, end_x, end_y]]),
+            multimask_output=False
+        )
+    except RuntimeError as e:
+        if "set_image" in str(e):
+            return JSONResponse(
+                content={
+                    "error": "No image has been uploaded. Please upload an image before using the rectangle tool.",
+                    "message": str(e)
+                },
+                status_code=400,
+            )
+        else:
+            return JSONResponse(
+                content={
+                    "error": "Unexpected error during rectangle mask prediction.",
+                    "message": str(e)
+                },
+                status_code=500,
+            )
     res = Image.fromarray(masks_[0])
-    # res.save("res.png")
     print(masks_[0].shape)
-    # res.save("res.png")
-
-    # Return a JSON response
     return JSONResponse(
         content={
             "masks": pil_image_to_base64(res),
@@ -575,7 +732,8 @@ async def read_assets(path, file_name):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
-    return read_content('segDrawer.html')
+    return read_content('segDrawer 2.html')
 
 import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=7860)
+

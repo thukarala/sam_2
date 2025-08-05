@@ -1,0 +1,1875 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <!-- <link href="./all.css" rel="stylesheet"> -->
+  <link href="assets/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: grey
+    }
+ 
+    /*@font-face {
+      font-family: 'FontAwesome';
+      src: url('./fa-solid-900.ttf') format('truetype'),
+      url('./fa-solid-900.woff2') format('woff2');
+      font-weight: normal;
+      font-style: normal;
+    }*/
+ 
+    #canvas-wrapper {
+      position: relative;
+      width: 700px;
+      height: 700px;
+    }
+ 
+    #slider-wrapper {
+      display: none;
+      position: absolute; /* Add this line */
+      z-index: 10; /* Add this line */
+      top: 47px; /* Adjust this value */
+      right: 50px; /* Adjust this value */
+    }
+ 
+    #canvas {
+      position: absolute;
+      border: 1px solid black;
+      width: 100%;
+      height: 100%;
+    }
+ 
+    #image-canvas, #temp-canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+ 
+    /* .button-wrapper {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    } */
+ 
+    .button-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 10px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+ 
+    .button {
+      background-color: #4CAF50;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      padding: 4px 8px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 12px;
+      margin: 2px 0;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+    }
+ 
+    #file-input-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 10px;
+      height: 10px;
+      cursor: pointer;
+    }
+ 
+    #file-input-wrapper input[type=file] {
+      opacity: 0;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+ 
+    #spinner-container {
+      /* display: flex; */
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #spinner-container span {
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      color: #333;
+      margin-top: 10px;
+    }
+ 
+    /* Sparkles */
+    .sparkles-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0; /* Hide the sparkles by default */
+    }
+ 
+    .sparkle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background-color: #fff;
+      border-radius: 50%;
+      animation: sparkle 4s linear infinite;
+    }
+ 
+    @keyframes sparkle {
+      0% {
+        transform: translateX(-10%) scale(0);
+        opacity: 0;
+      }
+      5% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(110%) scale(1);
+        opacity: 0;
+      }
+    }
+ 
+    .folder-panel {
+      position: absolute;
+      top: 10px;
+      right: -310px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      min-width: 200px;
+    }
+    
+    .folder-controls {
+      margin-bottom: 15px;
+    }
+    
+    .folder-input-group {
+      margin-bottom: 10px;
+    }
+    
+    .folder-input-group label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #333;
+    }
+    
+    .folder-input-group input[type="file"] {
+      margin-bottom: 5px;
+    }
+    
+    .folder-input-group span {
+      display: block;
+      color: #666;
+      font-style: italic;
+      font-size: 11px;
+    }
+    
+    .navigation-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 5px;
+    }
+    
+    .nav-button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .nav-button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+    
+    .nav-button:hover:not(:disabled) {
+      background-color: #0056b3;
+    }
+    
+    #image-counter {
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .save-control {
+      text-align: center;
+    }
+    
+    .save-button {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0 auto;
+    }
+    
+    .save-button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+    
+    .save-button:hover:not(:disabled) {
+      background-color: #218838;
+    }
+
+    .label-dropdown {
+        padding: 6px;
+        font-size: 12px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        background: white;
+        cursor: pointer;
+    }
+
+    .d-none{
+        display:none !important;
+    }
+ 
+  </style>
+</head>
+ 
+<body>
+  
+  <div id="canvas-wrapper">
+    <div id="video-output-wrapper" style="display:none; position:absolute; top:0; left:710px; width:480px; height:360px; z-index:30; background:#222; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.2); padding:10px;">
+      <video id="output-video" width="460" height="340" controls style="background:#000; border-radius:8px;"></video>
+      <button id="close-video" style="margin-top:8px; float:right;">Close</button>
+      <button id="download-video" style="margin-top:8px; float:left; display:none;">Download Video</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <canvas id="image-canvas"></canvas>
+    <canvas id="temp-canvas" style="pointer-events: none;"></canvas>
+    <div class="sparkles-container"></div>
+    <div class="button-wrapper">
+      <button class="button" id="remove-image"><i class="fas fa-times"></i></button>
+      <button class="button" id="draw-mask"><i class="fas fa-pencil"></i></button>
+      <button class="button" id="magic-tool"><i class="fas fa-wand-magic-sparkles"></i></button>
+      <button class="button" id="draw-rect"><i class="fas fa-shapes"></i></button>
+      <button class="button" id="seg-everything"><i class="fas fa-fill-drip"></i></button>
+      <button class="button" id="undo-path"><i class="fas fa-undo"></i></button>
+      <button class="button" id="eraser"><i class="fa-solid fa-eraser"></i></button>
+      <button class="button" id="save-images"><i class="fas fa-download"></i></button>
+      <button class="button" id="seg-video"><i class="fa-solid fa-film"></i></button>
+      <button class="button" id="download-image" style="display:none;"><i class="fas fa-download"></i> Download Image</button>
+      <select id="label-selector" class="label-dropdown">
+        <option value="lanes" selected>Lanes</option>
+        <option value="drivableArea">Drivable Area</option>
+    </select>
+    </div>
+    <!-- Folder Selection Panel -->
+    <div class="folder-panel" id="folder-panel">
+      <div class="folder-controls">
+        <div class="folder-input-group">
+          <label for="input-folder">Input Folder:</label>
+          <input type="file" id="input-folder" webkitdirectory accept="image/*,video/*">
+          <span id="input-folder-path">No folder selected</span>
+        </div>
+        
+        <div class="folder-input-group">
+          <label for="output-folder">Output Folder:</label>
+          <input type="file" id="output-folder" webkitdirectory>
+          <span id="output-folder-path">No folder selected</span>
+        </div>
+      </div>
+      
+      <!-- Navigation Controls -->
+      <div class="navigation-controls">
+        <button class="nav-button" id="prev-image" disabled>
+          <i class="fas fa-chevron-left"></i> Previous
+        </button>
+        <span id="image-counter">0 / 0</span>
+        <button class="nav-button" id="next-image" disabled>
+          Next <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+      
+      <!-- Save Control -->
+      <div class="save-control">
+        <button class="save-button" id="save-current" disabled>
+          <i class="fas fa-save"></i> Save Annotation
+        </button>
+      </div>
+    </div>
+    <div id="slider-wrapper">
+      <input type="range" min="1" max="100" value="50" class="slider" id="brush-size">
+    </div>
+    <div id="file-input-wrapper">
+      <input type="file" id="file-input">
+    </div>
+  </div>
+ 
+  <!-- <div id="spinner-container" class="position-fixed top-50 start-50 translate-middle d-none"> -->
+  <div id="spinner-container" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:20;" class="d-none">
+      <div class="spinner-border text-primary" role="status"></div>
+      <span style="color: #dc3545; font-size: 2em;">Preprocessing image...</span>
+  </div>
+
+
+
+
+
+  <script type="text/javascript">
+  window.addEventListener('DOMContentLoaded', function() {
+    // Robust redrawPaths for all annotation types
+    function redrawPaths(canvas, paths) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const path of paths) {
+        if (path.type === 'brush' && path.points) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.beginPath();
+          for (let i = 0; i < path.points.length; i++) {
+            const pt = path.points[i];
+            if (i === 0) ctx.moveTo(pt.fromX, pt.fromY);
+            ctx.lineTo(pt.toX, pt.toY);
+          }
+          ctx.strokeStyle = 'rgba(147, 112, 219, 1)';
+          ctx.lineWidth = path.lineWidth || 2;
+          ctx.stroke();
+          ctx.restore();
+        } else if (path.type === 'eraser' && path.points) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.beginPath();
+          for (let i = 0; i < path.points.length; i++) {
+            const pt = path.points[i];
+            if (i === 0) ctx.moveTo(pt.fromX, pt.fromY);
+            ctx.lineTo(pt.toX, pt.toY);
+          }
+          ctx.strokeStyle = 'rgba(0,0,0,1)';
+          ctx.lineWidth = path.lineWidth || 2;
+          ctx.stroke();
+          ctx.restore();
+        } else if (path.type === 'magic' && path.points) {
+          putDataOnCanvas(canvas, path.points, path.color || {r:0,g:180,b:255});
+        } else if (path.type === 'rect' && path.points && path.color) {
+          putDataOnCanvas(canvas, path.points, path.color);
+        }
+      }
+    }
+    // --- BEGIN MAIN JS ---
+
+
+    // Tool state variables (declare only once, at the top)
+    window.isDrawing = false;
+    window.isMagicToolActive = false;
+    window.isRecting = false;
+    window.isErasing = false;
+
+    // Button elements
+    const drawMaskBtn = document.getElementById('draw-mask');
+    const magicToolBtn = document.getElementById('magic-tool');
+    const drawRectBtn = document.getElementById('draw-rect');
+    const eraserBtn = document.getElementById('eraser');
+    const undoBtn = document.getElementById('undo-path');
+
+    // Tool activation functions
+
+    function activateDraw() {
+      window.isDrawing = true;
+      window.isMagicToolActive = false;
+      window.isRecting = false;
+      window.isErasing = false;
+      // update UI as needed
+    }
+    function activateMagic() {
+      window.isDrawing = false;
+      window.isMagicToolActive = true;
+      window.isRecting = false;
+      window.isErasing = false;
+      // update UI as needed
+    }
+    function activateRect() {
+      window.isDrawing = false;
+      window.isMagicToolActive = false;
+      window.isRecting = true;
+      window.isErasing = false;
+      // update UI as needed
+    }
+    function activateEraser() {
+      window.isDrawing = false;
+      window.isMagicToolActive = false;
+      window.isRecting = false;
+      window.isErasing = true;
+      // update UI as needed
+    }
+    function undoAction() {
+      // Robust undo logic for all annotation types
+      // If magic tool is active and there are prompt points, remove the last prompt and mask
+      if (window.isMagicToolActive && promptPoints.length > 0) {
+        promptPoints.pop();
+        interactivePaths.pop();
+        oriInteractivePaths.pop();
+        redrawPaths(canvas, drawnPaths);
+        const curLen = interactivePaths.length;
+        if (curLen > 0) {
+          putDataOnCanvas(canvas, interactivePaths[curLen - 1]);
+        }
+        for (const thisPrompt of promptPoints) {
+          drawPromptPointOnClick(thisPrompt, canvas);
+        }
+        return;
+      }
+      // If there are committed drawn paths, remove the last one
+      if (drawnPaths.length > 0) {
+        const lastPath = drawnPaths.pop();
+        oriDrawnPaths.pop();
+        if (lastPath.type === 'magic') {
+          fetch("/undo", { method: "POST" })
+            .then((response) => response.json())
+            .then((data) => { console.log("Success:", data); })
+            .catch((error) => { console.error("Error:", error); });
+        }
+        redrawPaths(canvas, drawnPaths);
+        redrawPaths(maskcanvas, oriDrawnPaths);
+        return;
+      }
+      // If there are still interactive (uncommitted) magic masks, clear them
+      if (interactivePaths.length > 0) {
+        interactivePaths.pop();
+        oriInteractivePaths.pop();
+        promptPoints.pop();
+        redrawPaths(canvas, drawnPaths);
+        const curLen = interactivePaths.length;
+        if (curLen > 0) {
+          putDataOnCanvas(canvas, interactivePaths[curLen - 1]);
+        }
+        for (const thisPrompt of promptPoints) {
+          drawPromptPointOnClick(thisPrompt, canvas);
+        }
+        return;
+      }
+      // Otherwise, nothing to undo
+      console.log('Nothing to undo');
+    }
+
+    // Attach event listeners
+    if (drawMaskBtn) drawMaskBtn.addEventListener('click', activateDraw);
+    if (magicToolBtn) magicToolBtn.addEventListener('click', activateMagic);
+    if (drawRectBtn) drawRectBtn.addEventListener('click', activateRect);
+    if (eraserBtn) eraserBtn.addEventListener('click', activateEraser);
+    if (undoBtn) undoBtn.addEventListener('click', undoAction);
+
+    // Existing code...
+    document.addEventListener('contextmenu', function(event) {
+        event.preventDefault(); // Prevent the default context menu from appearing (right-click menu in browsers)
+    });
+
+    // Remove any duplicate declarations of isDrawing, isMagicToolActive, isRecting, isErasing elsewhere in the script
+    // (If found, comment them out or remove them)
+
+    async function canvasToBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+              resolve(blob);
+          } else {
+              reject(new Error("Canvas to Blob conversion failed"));
+          }
+        });
+      });
+    }
+
+    async function blobToByteArray(blob) {
+      return new Uint8Array(await new Response(blob).arrayBuffer());
+    }
+
+    function randomRGBColor() {
+      const red = Math.floor(Math.random() * 256);
+      const green = Math.floor(Math.random() * 256);
+      const blue = Math.floor(Math.random() * 256);
+      return { r: red, g: green, b: blue};
+    }
+    
+    // Magic tool functionality
+    const tolerance = 30;
+
+    // Make lane color more visible (brighter blue)
+    const labelColors = {
+        drivableArea: { r: 255, g: 128, b: 0 },
+        lanes: { r: 0, g: 180, b: 255 }, // brighter blue
+    };
+
+    let replacementColor =  { r: 0, g: 180, b: 255 }; // default
+    
+    const labelSelector = document.getElementById('label-selector');
+    labelSelector.addEventListener('change', function () {
+        const selectedLabel = labelSelector.value;
+        replacementColor = labelColors[selectedLabel];
+        console.log('Selected label:', selectedLabel);
+        console.log('Replacement color updated to:', replacementColor);
+    });
+    const alpha_255 = 191.25;
+    const alpha_1 = 1; // for manual drawer (avoid color overlay artifact when = 0.75)
+    
+    // Batch processing variables
+    let inputFiles = [];
+    let currentMediaIndex = -1;
+    let outputFolderHandle = null;
+    let isAnnotationSaved = true;
+    
+    // UI elements
+    const inputFolderInput = document.getElementById('input-folder');
+    const outputFolderInput = document.getElementById('output-folder');
+    const inputFolderPath = document.getElementById('input-folder-path');
+    const outputFolderPath = document.getElementById('output-folder-path');
+    const prevImageBtn = document.getElementById('prev-image');
+    const nextImageBtn = document.getElementById('next-image');
+    const saveCurrentBtn = document.getElementById('save-current');
+    const imageCounter = document.getElementById('image-counter');
+
+    const random_color = {};
+    for (let i = 1; i <= 255; i++) {
+      random_color[i] = randomRGBColor();
+    }
+
+    // canvas image xy to original image xy
+    function getXYLocationInOriImage(x, y) {
+      x -= scaledX;
+      y -= scaledY;
+
+      x /= scaleFactor;
+      y /= scaleFactor;
+
+      x = Math.round(x);
+      y = Math.round(y);
+
+      return { x, y };
+    }
+
+    // canvas idx to original image idx
+    function getIdxLocationInOriImage(idx) {
+      let x = idx % 700;
+      let y = Math.floor(idx / 700);
+
+      x -= scaledX;
+      y -= scaledY;
+
+      x /= scaleFactor;
+      y /= scaleFactor;
+
+      x = Math.round(x);
+      y = Math.round(y);
+
+      return y * originalUnresizedImageData.width + x;
+    }
+
+    // scaled image idx to original image idx
+    function imgidx2oriidx(idx) {
+      let { x, y } = idx2xy(idx);
+      x /= scaleFactor;
+      y /= scaleFactor;
+      x = Math.round(x);
+      y = Math.round(y);
+      return y * originalUnresizedImageData.width + x;
+    }
+
+    // event location is on canvas, which is different from the original image size
+    function getEventLocationInOriImage(event) {
+      let x = event.offsetX;
+      let y = event.offsetY;
+
+      return getXYLocationInOriImage(x, y);
+    }
+
+    // // scaled image xy to scaled image idx
+    // function xy2idx(x, y) {
+    //   return y * scaledWidth + x;
+    // }
+
+    // // scaled image idx to scaled image xy
+    // function idx2xy(idx) {
+    //   let x = idx % scaledWidth;
+    //   let y = Math.floor(idx / scaledWidth);
+
+    //   return { x, y };
+    // }
+
+    // Handle input folder selection (images and videos)
+    inputFolderInput.addEventListener('change', (event) => {
+        console.log(event.target.files);
+        // Accept both images and videos
+        const files = Array.from(event.target.files).filter(file =>
+            file.type.startsWith('image/') || file.type.startsWith('video/')
+        );
+        console.log(files)
+        if (files.length > 0) {
+            inputFiles = files;
+            currentMediaIndex = -1;
+            inputFolderPath.textContent = `${files.length} files selected`;
+            updateNavigationButtons();
+            updateImageCounter();
+            // Load first media (image or video)
+            if (files.length > 0) {
+                loadMediaAtIndex(0);
+            }
+        }
+    });
+    
+    // Handle output folder selection (using File System Access API)
+    outputFolderInput.addEventListener('change', async (event) => {
+    try {
+        // For modern browsers with File System Access API
+        if ('showDirectoryPicker' in window) {
+            outputFolderHandle = await window.showDirectoryPicker();
+            outputFolderPath.textContent = outputFolderHandle.name;
+        } else {
+            // Fallback for browsers without File System Access API
+            // Try to get the folder from the file input (if possible)
+            if (event.target.files && event.target.files.length > 0) {
+                // Use the parent directory of the first file as the output folder name
+                const firstFile = event.target.files[0];
+                const folderName = firstFile.webkitRelativePath ? firstFile.webkitRelativePath.split('/')[0] : 'Output folder selected';
+                outputFolderPath.textContent = folderName;
+            } else {
+                outputFolderPath.textContent = "Output folder selected (download mode)";
+            }
+            outputFolderHandle = null;
+            // Suppress the info notification for browsers that do not support folder saving
+            // showNotification('Your browser does not support saving directly to folders. The file will be downloaded instead.', 'info');
+        }
+        updateSaveButton();
+    } catch (err) {
+        console.log('Folder selection cancelled');
+    }
+    });
+
+    // Load media (image or video) at specific index
+    function loadMediaAtIndex(index) {
+        if (index < 0 || index >= inputFiles.length) return;
+        // Check if current annotation is saved
+        if (!isAnnotationSaved && currentMediaIndex !== -1) {
+            if (!confirm('Current annotation is not saved. Do you want to continue?')) {
+                return;
+            }
+        }
+        currentMediaIndex = index;
+        const file = inputFiles[index];
+        // Clear previous annotations
+        clearAllAnnotations();
+        // Use the same core function, detect if video or image
+        if (file.type.startsWith('video/')) {
+            getFirstFrameAsBlob(file).then(firstFrameBlob => {
+                handleImage(firstFrameBlob, 1);
+            });
+        } else {
+            handleImage(file, 0);
+        }
+        // Update UI
+        updateNavigationButtons();
+        updateImageCounter();
+        isAnnotationSaved = true;
+        updateSaveButton();
+    }
+
+    // Clear all annotations
+    function clearAllAnnotations() {
+        // Clear all paths
+        drawnPaths.splice(0);
+        oriDrawnPaths.splice(0);
+        interactivePaths.splice(0);
+        oriInteractivePaths.splice(0);
+        promptPoints.splice(0);
+        
+        // Clear canvases
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        maskcontext.clearRect(0, 0, maskcanvas.width, maskcanvas.height);
+        
+        // Stop any active tools
+        stopDrawing();
+        stopMagicDrawing();
+        stopErasing();
+        stopRecting();
+    }
+        
+    // Load image from file object
+   
+
+    // Previous media button
+    prevImageBtn.addEventListener('click', () => {
+        if (currentMediaIndex > 0) {
+            loadMediaAtIndex(currentMediaIndex - 1);
+        }
+    });
+    // Next media button
+    nextImageBtn.addEventListener('click', () => {
+        if (currentMediaIndex < inputFiles.length - 1) {
+            loadMediaAtIndex(currentMediaIndex + 1);
+        }
+    });
+    
+    // Update navigation button states
+    function updateNavigationButtons() {
+        prevImageBtn.disabled = currentMediaIndex <= 0 || inputFiles.length === 0;
+        nextImageBtn.disabled = currentMediaIndex >= inputFiles.length - 1 || inputFiles.length === 0;
+    }
+    // Update media counter display
+    function updateImageCounter() {
+        const current = currentMediaIndex >= 0 ? currentMediaIndex + 1 : 0;
+        const total = inputFiles.length;
+        imageCounter.textContent = `${current} / ${total}`;
+    }
+
+    // Save current annotation (image or video)
+    saveCurrentBtn.addEventListener('click', async () => {
+        if (currentMediaIndex === -1) return;
+        try {
+            // Redraw all overlays to maskcanvas before saving
+            redrawPaths(maskcanvas, oriDrawnPaths);
+            // Generate mask image from maskcanvas
+            const maskDataURL = maskcanvas.toDataURL('image/png');
+            // Convert to blob
+            const response = await fetch(maskDataURL);
+            const blob = await response.blob();
+            const currentFile = inputFiles[currentMediaIndex];
+            const baseName = currentFile.name.split('.')[0];
+            let maskFileName = `${baseName}_mask.png`;
+            // If video, save as video mask (optional: you can change extension/logic as needed)
+            if (currentFile.type.startsWith('video/')) {
+                maskFileName = `${baseName}_video_mask.png`;
+            }
+            // If browser supports File System Access API and user selected a folder
+            if ('showDirectoryPicker' in window) {
+                if (outputFolderHandle && typeof outputFolderHandle.getFileHandle === 'function') {
+                    // Save using File System Access API
+                    const fileHandle = await outputFolderHandle.getFileHandle(maskFileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    console.log(`Saved: ${maskFileName}`);
+                    showNotification('Annotation saved to output folder!', 'success');
+                } else {
+                    // User has not selected a folder yet
+                    showNotification('Please select an output folder using the folder picker before saving.', 'error');
+                    return;
+                }
+            } else {
+                // Fallback: trigger download for browsers without File System Access API
+                showNotification('Your browser does not support saving directly to folders. The file will be downloaded instead.', 'info');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = maskFileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            isAnnotationSaved = true;
+            updateSaveButton();
+            // Clear previous annotations
+            clearAllAnnotations();
+        } catch (error) {
+            console.error('Error saving annotation:', error);
+            showNotification('Error saving annotation', 'error');
+        }
+    });
+        
+        // Update save button state
+        function updateSaveButton() {
+            const hasAnnotations = drawnPaths.length > 0 || oriDrawnPaths.length > 0;
+            const hasOutputFolder = outputFolderHandle !== null || outputFolderPath.textContent !== 'No folder selected';
+            const hasCurrentMedia = currentMediaIndex >= 0;
+            saveCurrentBtn.disabled = !(hasAnnotations && hasOutputFolder && hasCurrentMedia);
+        }
+        
+        // Mark annotation as unsaved when user makes changes
+        function markAnnotationUnsaved() {
+            isAnnotationSaved = false;
+            updateSaveButton();
+        }
+        
+        // Show notification
+        function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'success' ? '#28a745' : '#dc3545'};
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+        }
+        
+        // Add CSS for notification animation
+        const style = document.createElement('style');
+        style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        `;
+        document.head.appendChild(style);
+
+    // only seg_everything, rect, and magic tool need to use this function
+    function getImagedataFromImageClass(Image, masktype) {
+      // Create a original size element and draw the image onto it
+      let tmpcanvas = document.createElement('canvas');
+      tmpcanvas.width = originalUnresizedImageData.width;
+      tmpcanvas.height = originalUnresizedImageData.height;
+      let tmpcontext = tmpcanvas.getContext('2d');
+
+      tmpcontext.drawImage(Image, 0, 0);
+
+      // Get the image data from the canvas
+      let imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+      let pixelData = imageData.data;
+
+      const imageMask = maskcontext.getImageData(0, 0, maskcanvas.width, maskcanvas.height);
+      const data = imageMask.data;
+
+      if (masktype == 'everything') {
+        // Get the pixel indices of the mask
+        for (let i = 0; i < pixelData.length; i += 4) {
+          if (pixelData[i] > 0) {
+            data[i] = random_color[pixelData[i]].r; // red
+            data[i + 1] = random_color[pixelData[i]].g; // green
+            data[i + 2] = random_color[pixelData[i]].b; // blue
+            data[i + 3] = alpha_255; // alpha
+          }
+        }
+        maskcontext.putImageData(imageMask, 0, 0);
+
+        oriDrawnPaths.push({
+          masks: pixelData,
+          type: "everything",
+        });
+      } 
+      else if (masktype == "rect") {
+        let pixels = [];
+        // Get the pixel indices of the mask
+        for (let i = 0; i < pixelData.length; i += 4) {
+          if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+            pixels.push(i);
+          }
+        }
+
+        for (let i = 0; i < pixels.length; i += 1) {
+          data[pixels[i]] = replacementColor.r; // red
+          data[pixels[i] + 1] = replacementColor.g; // green
+          data[pixels[i] + 2] = replacementColor.b; // blue
+          data[pixels[i] + 3] = alpha_255; // alpha
+        }
+        maskcontext.putImageData(imageMask, 0, 0);
+
+        oriDrawnPaths.push({
+          points: pixels,
+          type: "rect",
+          color: {...replacementColor},
+          label: labelSelector.value
+        });
+      } 
+      else if (masktype == "magic") {
+        let pixels = [];
+        // Get the pixel indices of the mask
+        for (let i = 0; i < pixelData.length; i += 4) {
+          if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+            pixels.push(i);
+          }
+        }
+
+        // we don't add anything to the oriDrawnPaths while interactive mode
+        oriInteractivePaths.push(pixels);
+      }
+      else {
+        // do nothing
+      }
+
+      // Create a canvas size element and draw the image onto it
+      tmpcanvas = document.createElement('canvas');
+      tmpcanvas.width = canvas.width;
+      tmpcanvas.height = canvas.height;
+      tmpcontext = tmpcanvas.getContext('2d');
+
+      tmpcontext.drawImage(Image, scaledX, scaledY, scaledWidth, scaledHeight);
+
+      // Get the image data from the canvas
+      imageData = tmpcontext.getImageData(0, 0, tmpcanvas.width, tmpcanvas.height);
+      pixelData = imageData.data;
+
+      return imageData.data;
+    }
+    
+    function magicToolHandler(event) {
+      if (!isMagicToolActive) return;
+      console.log("magic tool handler")
+
+      // step 1: get starting point
+      const { x, y } = getEventLocationInOriImage(event);
+      promptPoints.push({
+          type: (event.which == 1) ? true : false,
+          origPoint: [event.offsetX, event.offsetY],
+          scaledPoint: [x, y],
+      });
+
+      // step 2: get image data for flood fill
+      const imageWidth = imageCanvas.width;
+      const imageHeight = imageCanvas.height;
+      const imageData = imageContext.getImageData(0, 0, imageWidth, imageHeight);
+      const pixelData = imageData.data;
+
+      const formData = new FormData();
+      const typeList = [];
+      const clickList = [];
+
+      for (const thisPrompt of promptPoints) {
+          typeList.push(thisPrompt.type ? 1 : 0);
+          clickList.push(thisPrompt.scaledPoint[0]);
+          clickList.push(thisPrompt.scaledPoint[1]);
+      }
+      formData.append("type", typeList);
+      formData.append("click_list", clickList);
+      
+      // Send a POST request to the server API
+      fetch("/click", {
+          method: "POST",
+          body: formData,
+      })
+      .then((response) => response.json())
+      .then((data) => {
+
+          let pixels = [];
+
+          // Get the base64-encoded image strings from the JSON response
+          const maskBase64 = data.masks;
+          const maskImage = new Image();
+          maskImage.src = `data:image/png;base64,${maskBase64}`;
+          maskImage.onload = function() {
+            const pixelData = getImagedataFromImageClass(maskImage, "magic");
+
+            console.log(pixelData.length)
+            // Get the pixel indices of the mask
+            for (let i = 0; i < pixelData.length; i += 4) {
+              if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+                pixels.push(i);
+              }
+            }
+            console.log(pixels.length)
+
+            // step 4: put magic mask on canvas
+            redrawPaths(canvas, drawnPaths);
+            putDataOnCanvas(canvas, pixels, {...replacementColor});
+
+            for (const thisPrompt of promptPoints) {
+                drawPromptPointOnClick(thisPrompt, canvas);
+            }
+
+            // step 5: Add the magic mask to drawnPaths array, with color and label
+            interactivePaths.push(pixels);
+            drawnPaths.push({
+              points: pixels,
+              type: "magic",
+              color: {...replacementColor},
+              label: labelSelector.value
+            });
+            markAnnotationUnsaved();
+          };
+      })
+      .catch((error) => {
+          console.error("Error:", error);
+      }).finally(() => {
+          // Hide the spinner
+          const spinnerContainer = document.getElementById("spinner-container");
+          if (spinnerContainer) spinnerContainer.classList.add("d-none");
+      });
+    }
+
+    function drawPromptPointOnClick(thisPrompt, canvas) {
+      let x = thisPrompt.origPoint[0];
+      let y = thisPrompt.origPoint[1];
+
+      const fillColor = `rgba(255, 255, 255, 0.75)`;
+      const strokeColor = thisPrompt.type ? `green` : `red`;
+
+      const context = canvas.getContext("2d");
+
+      context.beginPath();
+      context.arc(x, y, 3, 0, Math.PI * 2);
+      context.fillStyle = fillColor;
+      context.fill();
+      context.strokeStyle = strokeColor;
+      context.stroke();
+    }
+
+function putDataOnCanvas(thisCanvas, pixels, color) {
+  const thisContext = thisCanvas.getContext("2d");
+  const canvasData = thisContext.getImageData(
+      0,
+      0,
+      thisCanvas.width,
+      thisCanvas.height
+  );
+  const data = canvasData.data;
+  const c = color || replacementColor;
+  for (let i = 0; i < pixels.length; i += 1) {
+      data[pixels[i]] = c.r; // red
+      data[pixels[i] + 1] = c.g; // green
+      data[pixels[i] + 2] = c.b; // blue
+      data[pixels[i] + 3] = alpha_255; // alpha
+  }
+  thisContext.putImageData(canvasData, 0, 0);
+}
+
+  const fileInput = document.getElementById('file-input');
+    let zipfileBase64 = null;
+    let imageName = "original_image";
+    let videoName = "original_video";
+    // for drawer
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+    // for image
+    const imageCanvas = document.getElementById('image-canvas');
+    const imageContext = imageCanvas.getContext('2d');
+    imageCanvas.style.zIndex = -1;
+    // for rect real-time visualization
+    const tempCanvas = document.getElementById('temp-canvas');
+    const tempContext = tempCanvas.getContext('2d');
+    tempCanvas.style.zIndex = 1;
+    // for image-size mask canvas
+    const maskcanvas = document.createElement('canvas');
+    const maskcontext = maskcanvas.getContext('2d');
+
+    canvas.width = 700;
+    canvas.height = 700;
+    imageCanvas.width = 700;
+    imageCanvas.height = 700;
+    tempCanvas.width = 700;
+    tempCanvas.height = 700;
+    // for saving mask purpose
+    let scaledWidth = -1;
+    let scaledHeight = -1;
+    let scaledX = -1;
+    let scaledY = -1;
+    // global variables for image
+    let scaleFactor = -1;
+
+    let originalUnresizedImageData;
+    let originalUnresizedMaskData;
+
+    // Prompt points in magic tool
+    const promptPoints = [];
+    const interactivePaths = [];
+    const oriInteractivePaths = [];
+
+    // Add a new array to store drawn paths
+    const drawnPaths = [];
+    const oriDrawnPaths = [];
+    // for magic tool
+    let isMagicToolActive = false;
+    // for draw rect
+    let isDrawingRect = false;
+    let rectStartX = 0;
+    let rectStartY = 0;
+    // for eraser
+    let isErasing = false;
+    // for draw mask, keep track of whether user is currently drawing
+    let isDrawing = false;
+    let isDown = false;
+    let lastX, lastY; // keep track of last position of the pointer
+
+    const slider = document.getElementById("brush-size");
+    let brushSize = slider.value;
+
+    const removeImageButton = document.getElementById('remove-image');
+    const drawMaskButton = document.getElementById('draw-mask');
+    const magicToolButton = document.getElementById('magic-tool');
+    const fileInputWrapper = document.getElementById('file-input-wrapper');
+    const drawRectButton = document.getElementById('draw-rect');
+
+    function stopDrawing() {
+      canvas.style.cursor = "auto";
+      // stop drawing
+      isDrawing = false;
+      sliderWrapper.style.display = 'none';
+    }
+    function stopMagicDrawing() {
+      canvas.style.cursor = "auto";
+      // stop magic drawing
+      try {
+        canvas.removeEventListener("mousedown", magicToolHandler);
+        console.log('remove magic tool handler')
+      } catch (error) {
+        console.log(error) // do nothing
+      }
+      isMagicToolActive = false;
+
+      if (interactivePaths.length != 0) {
+          const mask_idx = interactivePaths.length - 1;
+          const lastPath = interactivePaths.pop();
+          const oriLastPath = oriInteractivePaths.pop();
+          promptPoints.splice(0);
+          interactivePaths.splice(0);
+          oriInteractivePaths.splice(0);
+
+          // draw on scaled-size canvas
+          drawnPaths.push({
+              points: lastPath,
+              type: "magic",
+              color: {...replacementColor},
+              label: labelSelector.value
+          });
+          redrawPaths(canvas, drawnPaths);
+          // draw on original-size canvas
+          oriDrawnPaths.push({
+              points: oriLastPath,
+              type: "magic",
+              color: {...replacementColor},
+              label: labelSelector.value
+          });
+          redrawPaths(maskcanvas, oriDrawnPaths);
+
+          const formData = new FormData();
+          formData.append("mask_idx", mask_idx);
+          fetch("/finish_click", {
+              method: "POST",
+              body: formData,
+          })
+              .then((response) => response.json())
+              .then((data) => {
+                  console.log("Success:", data);
+              })
+              .catch((error) => {
+                  console.error("Error:", error);
+              })
+              .finally(() => {
+                  // // Hide the spinner
+                  const spinnerContainer = document.getElementById("spinner-container");
+                  if (spinnerContainer) spinnerContainer.classList.add("d-none");
+              });
+      }
+    }
+    function stopErasing() {
+      canvas.style.cursor = "auto";
+      // stop erasing
+      isErasing = false;
+    }
+
+    function stopRecting() {
+      canvas.style.cursor = "auto";
+      // stop draw recting
+      isDrawingRect = false;
+    }
+
+    function hideFileInput() {
+      fileInputWrapper.style.display = 'none';
+    }
+
+    function showFileInput() {
+      fileInputWrapper.style.display = 'block';
+    }
+
+
+    // Add event listener for the draw-rect button
+    drawRectButton.addEventListener('click', () => {
+      // stop any other drawing
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      // stop drawing
+      if (isDrawingRect) {
+        canvas.style.cursor = 'auto';
+        isDrawingRect = false;
+      }
+      // start drawing
+      else {
+        canvas.style.cursor = `crosshair`; // change cursor to a crosshair
+        isDrawingRect = true; 
+      }
+    });
+
+
+    // for processing video
+    async function getFirstFrameAsBlob(file) {
+        return new Promise((resolve, reject) => {
+          videoName = file.name.split('.')[0];
+          console.log(videoName)
+
+          const video = document.createElement('video');
+          video.preload = 'auto'; // Preload video
+          video.src = URL.createObjectURL(file);
+
+          // Trigger seeked event after metadata loaded
+          video.addEventListener('loadedmetadata', function() {
+              this.currentTime = 0;
+          }, false);
+
+          // Extract first frame when seek operation completes
+          video.addEventListener('seeked', function() {
+              const canvas = document.createElement('canvas');
+              const context = canvas.getContext('2d');
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+
+              // Draw the first frame of the video onto the canvas
+              context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+
+              // Convert the canvas to a blob
+              canvas.toBlob(blob => {
+                  // Convert blob to file
+                  const file = new File([blob], 'frame.png', { type: 'image/png' });
+                  resolve(file);
+              });
+
+              // Remove the video element after capturing the frame
+              video.remove();
+          }, false);
+
+          // When video can be played through, upload to server
+          video.addEventListener('canplaythrough', function() {
+              const spinnerContainer = document.getElementById("spinner-container");
+              const spinnerText = spinnerContainer.querySelector('span');
+              // Change the spinner text
+              spinnerText.textContent = "Uploading video...";
+              // Show the spinner
+              spinnerContainer.classList.remove("d-none");
+
+              // Create new FormData instance and append the video file
+              const formData = new FormData();
+              formData.append("video", file);
+
+              // Upload the video file to the server
+              fetch("/video", {
+                  method: "POST",
+                  body: formData,
+              })
+              .then((response) => response.json())
+              .then((data) => {
+                  console.log("Success:", data);
+                  // Do not fetch processed video here; wait for user to click 'seg video'.
+              })
+              .catch((error) => {
+                  console.error("Error:", error);
+              })
+              .finally(() => {
+                  // Hide the spinner
+                  spinnerContainer.classList.add("d-none");
+                  console.log('finally')
+              });
+          }, false);
+        });
+    }
+
+    // for processing image
+    function handleImage(file, is_video) {
+        // Extract and store the uploaded image name
+        imageName = file.name.split('.')[0];
+        console.log(`[LOG] Calling SAM backend API for Image name: ${imageName}`);
+
+        const image = new Image();
+        image.onload = async () => {
+          const spinnerContainer = document.getElementById("spinner-container");
+          if (!is_video) {
+            const spinnerText = spinnerContainer.querySelector('span');
+            // Change the spinner text
+            spinnerText.textContent = "Preprocessing image...";
+            // Show the spinner
+            spinnerContainer.classList.remove("d-none");
+          }
+          
+          // for keeping original sized image
+          const tmp_canvas = document.createElement('canvas');
+          tmp_canvas.width = image.width;
+          tmp_canvas.height = image.height;
+          const ctx = tmp_canvas.getContext('2d');
+          // for keeping original sized mask
+          maskcanvas.width = image.width;
+          maskcanvas.height = image.height;
+
+          ctx.drawImage(image, 0, 0, image.width, image.height);
+          originalUnresizedImageData = ctx.getImageData(0, 0, image.width, image.height);
+
+          scaleFactor = Math.min(imageCanvas.width / image.width, imageCanvas.height / image.height);
+
+          scaledWidth = image.width * scaleFactor;
+          scaledHeight = image.height * scaleFactor;
+
+          scaledX = (imageCanvas.width - scaledWidth) / 2;
+          scaledY = (imageCanvas.height - scaledHeight) / 2;
+
+          // reset width and height can refresh the canvas so that prev image will not be kept
+          imageCanvas.width = 700;
+          imageCanvas.height = 700;
+          imageContext.drawImage(image, scaledX, scaledY, scaledWidth, scaledHeight);
+
+          hideFileInput();
+
+          if (is_video) {
+              return;
+          }
+          const imageBlob = await canvasToBlob(tmp_canvas);
+          const imageByteArray = await blobToByteArray(imageBlob);
+
+          const formData = new FormData();
+          formData.append("image", new Blob([imageByteArray]), "image.png");
+          fetch("/image", {
+              method: "POST",
+              body: formData,
+          })
+          .then((response) => response.json())
+          .then((data) => {
+              console.log("Success:", data);
+          })
+          .catch((error) => {
+              console.error("Error:", error);
+          }).finally(() => {
+            // Hide the spinner
+            spinnerContainer.classList.add("d-none");
+            console.log('finally')
+          });
+        };
+        image.src = URL.createObjectURL(file);
+    }
+
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      const fileType = file.type;
+      zipfileBase64 = null;
+
+      const validVideoTypes = ['video/mp4', 'video/quicktime'];
+      if (validVideoTypes.includes(fileType)) {
+          // Hide image download button, show video download button
+          document.getElementById('download-image').style.display = 'none';
+          // Video workflow
+          const firstFrameBlob = await getFirstFrameAsBlob(file);
+          handleImage(firstFrameBlob, 1);
+      } else {
+          // Hide video download button, show image download button only after annotation
+          document.getElementById('download-video').style.display = 'none';
+          document.getElementById('download-image').style.display = 'inline-block';
+          handleImage(file, 0);
+      }
+  });
+
+    removeImageButton.addEventListener('click', () => {
+      imageContext.clearRect(0, 0, imageCanvas.width, imageCanvas.height); // clear the image canvas
+      context.clearRect(0, 0, canvas.width, canvas.height); // clear the drawer canvas
+      stopDrawing();
+      stopErasing();
+      stopMagicDrawing();
+      stopRecting();
+      
+      while (drawnPaths.length > 0) {
+        drawnPaths.pop();
+      }
+      while (oriDrawnPaths.length > 0) {
+        oriDrawnPaths.pop();
+      }
+      showFileInput();
+      // Reset the file input value, force the browser to treat the re-uploaded file as a new file
+      fileInput.value = '';
+    });
+
+    slider.addEventListener("input", () => {
+      brushSize = slider.value;
+    });
+
+    const sliderWrapper = document.getElementById('slider-wrapper');
+    sliderWrapper.style.display = 'none';
+
+    drawMaskButton.addEventListener('click', (event) => {
+      stopMagicDrawing();
+      stopErasing();
+      stopRecting();
+      // toggle slider visibility
+      sliderWrapper.style.display = (sliderWrapper.style.display == 'none') ? 'block' : 'none';
+      // stop drawing
+      if (isDrawing) {
+        canvas.style.cursor = 'auto';
+        isDrawing = false;
+      }
+      // start drawing
+      else {
+        canvas.style.cursor = `crosshair`; // change cursor to a crosshair
+        isDrawing = true; 
+      }
+    });
+
+    canvas.addEventListener('mousedown', (event) => {
+      if (isDrawing || isErasing) {
+        lastX = event.offsetX;
+        lastY = event.offsetY;
+        isDown = true;
+
+        // Start a new path
+        drawnPaths.push({
+          type: isErasing ? 'eraser' : 'brush',
+          points: [],
+          lineWidth: brushSize,
+        });
+        oriDrawnPaths.push({
+          type: isErasing ? 'eraser' : 'brush',
+          points: [],
+          lineWidth: brushSize / scaleFactor,
+        });
+      } else if (isDrawingRect) {
+        rectStartX = event.offsetX;
+        rectStartY = event.offsetY;
+        isDown = true;
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      if (isDrawingRect && isDown) {
+        // Clear the temporary canvas
+        tempContext.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // context.beginPath();
+        // context.rect(rectStartX, rectStartY, rectEndX - rectStartX, rectEndY - rectStartY);
+        // context.strokeStyle = 'rgba(147, 112, 219, 1)';
+        // context.lineWidth = 2;
+        // context.stroke();
+
+        // get start and end points of the rect
+        const {x: startX, y: startY} = getXYLocationInOriImage(rectStartX, rectStartY);
+        const {x: endX, y: endY} = getXYLocationInOriImage(event.offsetX, event.offsetY);
+        console.log(rectStartX, rectStartY, event.offsetX, event.offsetY);
+        console.log(startX, startY, endX, endY);
+        const formData = new FormData();
+        formData.append("start_x", startX);
+        formData.append("start_y", startY);
+        formData.append("end_x", endX);
+        formData.append("end_y", endY);
+        // Send a POST request to the server API
+        fetch("/rect", {
+            method: "POST",
+            body: formData,
+        })
+        .then((response) => response.json())
+        .then((data) => {
+            // console.log("Success:", data.masks);
+            let pixels = [];
+
+            // Get the base64-encoded image strings from the JSON response
+            const maskBase64 = data.masks;
+            const maskImage = new Image();
+            maskImage.src = `data:image/png;base64,${maskBase64}`;
+            maskImage.onload = function() {
+              const pixelData = getImagedataFromImageClass(maskImage, "rect");
+
+              // console.log(pixelData.length)
+              // let uniquePixelData = [...new Set(pixelData)];
+              // console.log(uniquePixelData);
+
+              // Get the pixel indices of the mask
+              for (let i = 0; i < pixelData.length; i += 4) {
+                if (pixelData[i] == 255 && pixelData[i + 1] == 255 && pixelData[i + 2] == 255) {
+                  pixels.push(i);
+                }
+              }
+              console.log(pixels.length)
+              // step 4: put rect mask on canvas
+              const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
+              const data = canvasData.data;
+              for (let i = 0; i < pixels.length; i += 1) {
+                data[pixels[i]] = replacementColor.r; // red
+                data[pixels[i] + 1] = replacementColor.g; // green
+                data[pixels[i] + 2] = replacementColor.b; // blue
+                data[pixels[i] + 3] = alpha_255; // alpha
+              }
+              context.putImageData(canvasData, 0, 0);
+
+              // step 5: Add the rect mask to drawnPaths array, store color and label
+              drawnPaths.push({
+                points: pixels,
+                type: "rect",
+                color: {...replacementColor},
+                label: labelSelector.value
+              });
+            };
+            markAnnotationUnsaved();
+        })
+        .catch((error) => {
+            console.error("Error:", error);
+        }).finally(() => {
+            // // Hide the spinner
+            // spinnerContainer.classList.add("d-none");
+        });
+      }
+      isDown = false;
+    });
+
+    canvas.addEventListener('mousemove', (event) => {
+      if ((isDrawing || isErasing) && isDown) {
+        const x = event.offsetX;
+        const y = event.offsetY;
+
+        // Check if the x and y coordinates are within the image boundaries
+        if (x >= scaledX && x < scaledX+scaledWidth && y >= scaledY && y < scaledY+scaledHeight &&
+            lastX >= scaledX && lastX < scaledX+scaledWidth && lastY >= scaledY && lastY < scaledY+scaledHeight) {
+          context.beginPath();
+          context.moveTo(lastX, lastY);
+          context.lineTo(x, y);
+          if (isErasing) {
+            context.globalCompositeOperation = 'destination-out';
+          } else {
+            context.globalCompositeOperation = 'source-over';
+          }
+          context.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          context.lineWidth = brushSize;
+          context.stroke();
+          context.beginPath();
+          context.arc(x, y, brushSize / 2, 0, 2 * Math.PI);
+          context.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          context.fill();
+
+          // Add the point to the current path
+          const currentPath = drawnPaths[drawnPaths.length - 1];
+          currentPath.points.push({ fromX: lastX, fromY: lastY, toX: x, toY: y });
+          const oriCurrentPath = oriDrawnPaths[oriDrawnPaths.length - 1];
+          const {x: orilastX, y: orilastY} = getXYLocationInOriImage(lastX, lastY);
+          const {x: orix, y: oriy} = getXYLocationInOriImage(x, y);
+          oriCurrentPath.points.push({ fromX: orilastX, fromY: orilastY, toX: orix, toY: oriy });
+
+          maskcontext.beginPath();
+          maskcontext.moveTo(orilastX, orilastY);
+          maskcontext.lineTo(orix, oriy);
+          if (isErasing) {
+            maskcontext.globalCompositeOperation = 'destination-out';
+          } else {
+            maskcontext.globalCompositeOperation = 'source-over';
+          }
+          maskcontext.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          maskcontext.lineWidth = brushSize / scaleFactor;
+          maskcontext.stroke();
+          maskcontext.beginPath();
+          maskcontext.arc(orix, oriy, brushSize / scaleFactor / 2, 0, 2 * Math.PI);
+          maskcontext.fillStyle = `rgba(147, 112, 219, ${alpha_1})`;
+          maskcontext.fill();
+        }
+        
+        lastX = x;
+        lastY = y;
+      } else if (isDrawingRect && isDown) {
+        const x = event.offsetX;
+        const y = event.offsetY;
+
+        // Clear the temporary canvas
+        tempContext.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Draw the rectangle on the temporary canvas
+        tempContext.beginPath();
+        tempContext.rect(rectStartX, rectStartY, x - rectStartX, y - rectStartY);
+        tempContext.strokeStyle = `rgba(147, 112, 219, ${alpha_1})`;
+        tempContext.lineWidth = 2;
+        tempContext.stroke();
+      }
+    });
+
+    const undoPathButton = document.getElementById('undo-path');
+
+    undoPathButton.addEventListener('click', () => {
+      if (promptPoints.length > 0) {
+          const lastPoint = promptPoints.pop();
+          const lastPath = interactivePaths.pop();
+          oriInteractivePaths.pop();
+
+          redrawPaths(canvas, drawnPaths);
+
+          const curLen = interactivePaths.length;
+          if (curLen > 0) {
+              putDataOnCanvas(canvas, interactivePaths[curLen - 1]);
+          }
+
+          for (const thisPrompt of promptPoints) {
+              drawPromptPointOnClick(thisPrompt, canvas);
+          }
+
+      }
+      else if (drawnPaths.length > 0) {
+        // Remove the last path from the array
+        const lastPath = drawnPaths.pop();
+        oriDrawnPaths.pop();
+        console.log(lastPath)
+
+        if (lastPath.type === 'magic') {
+          fetch("/undo", {
+              method: "POST",
+          })
+          .then((response) => response.json())
+          .then((data) => {
+              console.log("Success:", data);
+          })
+          .catch((error) => {
+              console.error("Error:", error);
+          }).finally(() => {
+              // // Hide the spinner
+              // spinnerContainer.classList.add("d-none");
+          });
+        } 
+
+        // Clear the canvas
+        redrawPaths(canvas, drawnPaths);
+
+        // clear the ori-size mask canvas
+        redrawPaths(maskcanvas, oriDrawnPaths);
+      }
+      else {
+      }
+    });
+
+    // Download Image button logic (for annotated images only)
+    const downloadImageButton = document.getElementById('download-image');
+    downloadImageButton.addEventListener('click', () => {
+      // Save the mask image using the original-size maskcanvas
+      // Ensure maskcanvas is up to date and has the correct size
+      if (!originalUnresizedImageData) {
+        showNotification('No mask to download. Please annotate and try again.', 'error');
+        return;
+      }
+      maskcanvas.width = originalUnresizedImageData.width;
+      maskcanvas.height = originalUnresizedImageData.height;
+      redrawPaths(maskcanvas, oriDrawnPaths);
+      const maskDataUrl = maskcanvas.toDataURL('image/png');
+      const maskLink = document.createElement('a');
+      maskLink.href = maskDataUrl;
+      maskLink.download = imageName + '_mask.png';
+      document.body.appendChild(maskLink);
+      maskLink.click();
+      document.body.removeChild(maskLink);
+    });
+
+    // seg video ----------------------------------------------------------------
+    const segVideoButton = document.getElementById('seg-video');
+    segVideoButton.addEventListener('click', async () => {
+      // Prevent running if no mask is present
+      if (oriDrawnPaths.length === 0) {
+        showNotification('Please annotate at least one region (point, box, or mask) before segmenting the video.', 'error');
+        return;
+      }
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      stopRecting();
+      const spinnerContainer = document.getElementById("spinner-container");
+      const spinnerText = spinnerContainer.querySelector('span');
+      spinnerText.innerHTML = "Preprocessing video...<br>This may take a while<br>depending on video length.";
+      spinnerContainer.classList.remove("d-none");
+
+      const maskBlob = await canvasToBlob(maskcanvas);
+      const maskByteArray = await blobToByteArray(maskBlob);
+      const formData = new FormData();
+      formData.append("ini_seg", new Blob([maskByteArray]), "image.png");
+      fetch('/ini_seg', {
+        method: 'POST',
+        body: formData
+      })
+      .then(async (response) => {
+        if (response.status === 204) {
+            showNotification('Video is saved already.', 'info');
+            throw new Error('Video is saved already');
+        }
+        if (!response.ok) {
+          // Try to parse error JSON
+          let errMsg = 'Unknown error';
+          try {
+            const err = await response.json();
+            errMsg = err.error || err.message || JSON.stringify(err);
+          } catch (e) {}
+          showNotification('Error: ' + errMsg, 'error');
+          throw new Error(errMsg);
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        console.log("Received video blob", blob);
+        const videoUrl = URL.createObjectURL(blob);
+        let videoElem = document.getElementById('output-video');
+        const wrapper = document.getElementById('video-output-wrapper');
+        if (!videoElem) {
+          videoElem = document.createElement('video');
+          videoElem.id = 'output-video';
+          videoElem.controls = true;
+          videoElem.style.width = '100%';
+          videoElem.style.height = '100%';
+          wrapper.appendChild(videoElem);
+        }
+        wrapper.style.display = 'block';
+        videoElem.src = videoUrl;
+        videoElem.load();
+        videoElem.onloadeddata = function() {
+          videoElem.play();
+        };
+        videoElem.onerror = function() {
+          showNotification('Could not play processed video. The file may be corrupted or not generated.', 'error');
+          wrapper.style.display = 'none';
+        };
+        // Show the download button and set up download
+        const downloadBtn = document.getElementById('download-video');
+        if (downloadBtn) {
+          downloadBtn.style.display = 'inline-block';
+          downloadBtn.onclick = function() {
+            var a = document.createElement('a');
+            a.href = videoUrl;
+            a.download = (typeof videoName !== 'undefined' ? videoName : 'annotated_video') + '.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          };
+        }
+        // Hide image download button when video is processed
+        document.getElementById('download-image').style.display = 'none';
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+        // Error notification already shown above
+      })
+      .finally(() => {
+        const spinnerContainer = document.getElementById("spinner-container");
+        if (spinnerContainer) spinnerContainer.classList.add("d-none");
+      });
+    });
+
+    // seg everything ----------------------------------------------------------------
+    const segEverythingButton = document.getElementById('seg-everything');
+
+    segEverythingButton.addEventListener('click', () => {
+      // stop everything
+      stopDrawing();
+      stopMagicDrawing();
+      stopErasing();
+      stopRecting();
+      // Show sparkles when processing starts
+      toggleSparkles(true);
+
+      // Send the image data to the server
+      fetch('/everything', {
+        method: 'POST'
+      })
+      .then((response) => response.json())
+      .then((data) => {
+        // Get the base64-encoded image strings from the JSON response
+        const maskBase64 = data.masks;
+        zipfileBase64 = data.zipfile;
+
+        const maskImage = new Image();
+        maskImage.src = `data:image/png;base64,${maskBase64}`;
+        maskImage.onload = function() {
+          const pixelData = getImagedataFromImageClass(maskImage, "everything");
+
+          const canvasData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const data = canvasData.data;
+
+          // Get the pixel indices of the mask
+          for (let i = 0; i < pixelData.length; i += 4) {
+            if (pixelData[i] > 0) {
+              data[i] = random_color[pixelData[i]].r; // red
+              data[i + 1] = random_color[pixelData[i]].g; // green
+              data[i + 2] = random_color[pixelData[i]].b; // blue
+              data[i + 3] = alpha_255; // alpha
+            }
+          }
+          
+          context.putImageData(canvasData, 0, 0);
+
+          drawnPaths.push({
+            masks: pixelData,
+            type: "everything",
+          });
+        };
+      }).finally(() => {
+        toggleSparkles(false);
+      });
+    });
+
+    // Ensure all upper buttons are wired up
+    magicToolButton.addEventListener('click', () => {
+      stopDrawing();
+      stopErasing();
+      stopRecting();
+      // toggle magic tool
+      if (isMagicToolActive) {
+        canvas.style.cursor = 'auto';
+        isMagicToolActive = false;
+        try {
+          canvas.removeEventListener("mousedown", magicToolHandler);
+        } catch (error) {}
+      } else {
+        canvas.style.cursor = 'crosshair';
+        isMagicToolActive = true;
+        canvas.addEventListener("mousedown", magicToolHandler);
+      }
+    });
+
+    const eraserButton = document.getElementById('eraser');
+    eraserButton.addEventListener('click', () => {
+      stopDrawing();
+      stopMagicDrawing();
+      stopRecting();
+      // toggle eraser
+      if (isErasing) {
+        canvas.style.cursor = 'auto';
+        isErasing = false;
+      } else {
+        canvas.style.cursor = 'crosshair';
+        isErasing = true;
+      }
+    });
+
+    // Defensive: ensure undo button is always enabled
+    undoPathButton.disabled = false;
+    // --- END MAIN JS ---
+});
+</script>
+
+</body>
+</html>
