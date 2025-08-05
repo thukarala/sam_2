@@ -95,9 +95,9 @@ if not use_sam2:
 else:
     sam2_checkpoint = "sam2_hiera_tiny.pt"
     model_cfg = "sam2_hiera_t.yaml"
-    sam2_model = build_sam2(model_cfg, sam2_checkpoint, device="cpu")
+    sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=device)
     predictor = SAM2ImagePredictor(sam2_model)
-    vid_predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device="cpu")
+    vid_predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device=device)
     inference_state = None
     mask_generator = SAM2AutomaticMaskGenerator(sam2_model)
 
